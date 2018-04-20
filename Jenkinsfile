@@ -58,4 +58,83 @@ containerTemplate(
             echo ">>> Deployment Complete"
         }
     }
+  } // END: Front-end chain builds
+
+// Chained build complete
+
+// *** NOTE: Weird commenting in the bdd section because of a bunch of /* in the commands screwing up the comment nesting
+
+/*
+    podTemplate(label: 'jenkins-bdd', name: 'jenkins-bdd', serviceAccount: 'jenkins', cloud: 'openshift', containers: [
+    containerTemplate(
+        name: 'jnlp',
+        image: '172.50.0.2:5000/openshift/jenkins-slave-bddstack',
+        resourceRequestCpu: '500m',
+        resourceLimitCpu: '1000m',
+        resourceRequestMemory: '1Gi',
+        resourceLimitMemory: '2Gi',
+        workingDir: '/tmp',
+        command: '',
+        args: '${computer.jnlpmac} ${computer.name}'
+        )
+    ])  {
+        node('jenkins-bdd') {
+            stage('Functional Test') {
+                //the checkout is mandatory, otherwise functional test would fail
+                echo "checking out source"
+                heckout scm
+                dir('functional-tests') {
+                    // retrieving variables from buildConfig
+                    TEST_USERNAME = sh (
+                    script: 'oc env bc/<name> --list | awk  -F  "=" \'/TEST_USERNAME/{print $2}\'',
+                    returnStdout: true).trim()
+                    TEST_PASSWORD = sh (
+                    script: 'oc env bc/<name> --list | awk  -F  "=" \'/TEST_PASSWORD/{print $2}\'',
+                    returnStdout: true).trim()
+                    try {
+                        sh 'export TEST_USERNAME=${TEST_USERNAME}\nexport TEST_PASSWORD=${TEST_PASSWORD}\n./gradlew --debug --stacktrace chromeHeadlessTest'
+                    } finally {
+*/
+                        //archiveArtifacts allowEmptyArchive: true, artifacts: 'build/reports/**/*'
+                        //archiveArtifacts allowEmptyArchive: true, artifacts: 'build/test-results/**/*'
+                        //junit 'build/test-results/**/*.xml'
+/*
+	                }
+                }
+            }
+        }
+*/          // *** NOTE: End of wierd commenting
+
+
+stage('deploy-test') {
+  timeout(time: 3, unit: 'DAYS') {
+      input message: "Deploy to test?", submitter: 'admin'
   }
+  node('master') {
+    echo ">>> Send code to test ...."
+    openshiftTag destStream: FE_IMAGE_NAME, verbose: 'true', destTag: 'test', srcStream: FE_IMAGE_NAME, srcTag: "${IMAGE_HASH}"
+    openshiftVerifyDeployment depCfg: FE_DEPLOYMENT_NAME, namespace: 'servicebc-ne-test', replicaCount: 1, verbose: 'false', verifyReplicaCount: 'false'
+    echo ">>> Sending email ...."
+    mail (to: 'user@domain', subject: "Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) promoted to test", body: "URL: ${env.BUILD_URL}.");
+    echo ">>> Stage deploy-test done"
+  }
+
+}
+
+/*
+stage('deploy-prod') {
+  timeout(time: 3, unit: 'DAYS') {
+      input message: "Deploy to prod?", submitter: 'admin'
+  }
+  node('master') {
+    echo ">>> Send code to production ...."
+    openshiftTag destStream: FE_IMAGE_NAME, verbose: 'true', destTag: 'prodblue', srcStream: FE_IMAGE_NAME, srcTag: 'prod'
+    openshiftTag destStream: FE_IMAGE_NAME, verbose: 'true', destTag: 'prod', srcStream: FE_IMAGE_NAME, srcTag: "${IMAGE_HASH}"
+    openshiftVerifyDeployment depCfg: FE_DEPLOYMENT_NAME, namespace: '<project-prefix>-prod', replicaCount: 1, verbose: 'false', verifyReplicaCount: 'false'
+    echo ">>> Sending email ...."
+    mail (to: 'user@domain', subject: "Job '${env.JOB_NAME}' (${env.BUILD_NUMBER}) promoted to production", body: "URL: ${env.BUILD_URL}.");
+    echo ">>> Stage deploy-prod done"
+  }
+}
+*/
+
